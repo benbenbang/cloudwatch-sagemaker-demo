@@ -9,21 +9,21 @@ Response = TypeVar("Response")
 
 cw = client("cloudwatch", region_name="eu-west-1")
 
-paginator = cw.get_paginator("list_metrics")
-for response in paginator.paginate(
-    Dimensions=[{"Name": "LogGroupName"}],
-    MetricName="IncomingLogEvents",
-    Namespace="AWS/Logs",
-):
-    print(response["Metrics"])
-
-
-cw.list_metric_streams()
-cw.list_metrics(Namespace="/aws/sagemaker/TrainingJobs")
-cw.list_metrics(Namespace="/aws/sagemaker/TrainingJobs", RecentlyActive="PT3H")
-
 
 class CloudWatchMetricsFilter:
+
+    cw = client("cloudwatch", region_name="eu-west-1")
+
+    @classmethod
+    def list_log_groups(cls):
+        paginator = cls.cw.get_paginator("list_metrics")
+        for response in paginator.paginate(
+            Dimensions=[{"Name": "LogGroupName"}],
+            MetricName="IncomingLogEvents",
+            Namespace="AWS/Logs",
+        ):
+            yield response["Metrics"]
+
     @classmethod
     def seek_metrics(cls, response: Response, namespace: str, filtered_metrics: Optional[List] = None):
         filtered_metrics = filtered_metrics or []
@@ -37,15 +37,23 @@ class CloudWatchMetricsFilter:
     @classmethod
     def filter(cls, namespace: str, filtered_metrics: Optional[List] = None):
         filtered_metrics = []
-        response = cw.list_metrics()
+        response = cls.cw.list_metrics()
         filtered_metrics = cls.seek_metrics(response, namespace)
 
         while response.get("NextToken"):
             next_token = response.pop("NextToken")
-            response = cw.list_metrics(NextToken=next_token)
+            response = cls.cw.list_metrics(NextToken=next_token)
             filtered_metrics = cls.seek_metrics(response, namespace, filtered_metrics)
 
         return filtered_metrics
+
+
+# List all the metric "streams"
+cw.list_metric_streams()
+# List all the training jobs
+cw.list_metrics(Namespace="/aws/sagemaker/TrainingJobs")
+# List all the training jobs in the last 3 days. NOTE: Although it looks like the RecentlyActive option is configurable, HOWEVER, it takes ONLY "PT3H" as value. So don't waste your time to try some other values...
+cw.list_metrics(Namespace="/aws/sagemaker/TrainingJobs", RecentlyActive="PT3H")
 
 
 # fetch all sagemaker metrics
